@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 st.set_page_config(page_title="Financial ML App", layout="wide")
 st.title("📊 Financial Machine Learning App")
 
-# --- Sidebar Configuration ---
+# --- Sidebar ---
 st.sidebar.header("Configuration")
 ticker = st.sidebar.text_input("Enter Stock Ticker", value="AAPL")
 start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2020-01-01"))
@@ -19,19 +19,23 @@ end_date = st.sidebar.date_input("End Date", pd.to_datetime("2024-12-31"))
 st.subheader(f"Downloading data for {ticker}")
 data = yf.download(ticker, start=start_date, end=end_date)
 
-# Flatten columns if MultiIndex
+# --- Fix MultiIndex Columns IMMEDIATELY ---
 if isinstance(data.columns, pd.MultiIndex):
-    data.columns = [' '.join(col).strip() for col in data.columns.to_flat_index()]
+    data.columns = [' '.join(map(str, col)).strip() for col in data.columns.values]
 
-# Show raw data to help debugging
-st.write("Raw Data Sample:")
+# --- Display Sample Data ---
+st.write("Sample of downloaded data:")
 st.dataframe(data.head())
 
-# --- Find Adjusted Close Column Robustly ---
-adj_close_col = next((col for col in data.columns if 'adj close' in col.lower()), None)
+# --- Safely Find 'Adj Close' Column ---
+adj_close_col = None
+for col in data.columns:
+    if 'adj close' in col.lower():
+        adj_close_col = col
+        break
 
-if not adj_close_col:
-    st.error("❌ 'Adj Close' column not found in the dataset. Please verify the ticker and date range.")
+if adj_close_col is None:
+    st.error("❌ 'Adj Close' column not found. Please check the ticker symbol and date range.")
     st.stop()
 
 # --- Feature Engineering ---
@@ -40,41 +44,37 @@ data['MA10'] = data[adj_close_col].rolling(window=10).mean()
 data['MA50'] = data[adj_close_col].rolling(window=50).mean()
 data.dropna(inplace=True)
 
-# --- Sidebar Feature Selection ---
+# --- Feature Selection ---
 st.sidebar.subheader("Feature Selection")
-possible_features = ['Open', 'High', 'Low', 'Close', 'Volume', 'MA10', 'MA50', 'Return']
-available_features = [f for f in possible_features if f in data.columns]
-selected_features = st.sidebar.multiselect("Select Features", available_features, default=['MA10', 'MA50', 'Return'])
+features_available = ['Open', 'High', 'Low', 'Close', 'Volume', 'MA10', 'MA50', 'Return']
+selected_features = st.sidebar.multiselect("Select Features", [f for f in features_available if f in data.columns], default=['MA10', 'MA50', 'Return'])
 
 if not selected_features:
-    st.warning("⚠️ Please select at least one feature.")
+    st.warning("Please select at least one feature.")
     st.stop()
 
-# --- Model Preparation ---
+# --- Train/Test Split ---
 X = data[selected_features]
 y = data[adj_close_col]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # --- Train Model ---
-st.subheader("Model Training and Evaluation")
+st.subheader("Model Training")
 model = RandomForestRegressor(n_estimators=100, random_state=42)
 model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 
-# --- Evaluation Metrics ---
-mse = mean_squared_error(y_test, y_pred)
-r2 = r2_score(y_test, y_pred)
-st.write(f"**Mean Squared Error (MSE):** {mse:.4f}")
-st.write(f"**R² Score:** {r2:.4f}")
+# --- Evaluation ---
+st.write(f"**Mean Squared Error (MSE):** {mean_squared_error(y_test, y_pred):.4f}")
+st.write(f"**R² Score:** {r2_score(y_test, y_pred):.4f}")
 
-# --- Plot Actual vs Predicted ---
+# --- Visualization ---
 st.subheader("📈 Actual vs Predicted")
 fig, ax = plt.subplots(figsize=(10, 5))
-ax.plot(y_test.values, label='Actual', color='blue')
-ax.plot(y_pred, label='Predicted', color='red')
-ax.set_title("Actual vs Predicted Prices")
+ax.plot(y_test.values, label='Actual')
+ax.plot(y_pred, label='Predicted')
+ax.set_title(f"Actual vs Predicted - {adj_close_col}")
 ax.legend()
 st.pyplot(fig)
 
-# --- Final Note ---
-st.info("📌 You can extend this app with Kragle datasets or more advanced ML models as part of the assignment.")
+st.info("📌 Extend this app with Kragle data or more ML models for bonus credit.")
