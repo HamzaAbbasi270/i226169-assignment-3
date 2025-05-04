@@ -42,7 +42,11 @@ data = data.dropna()
 
 # --- User Select Features ---
 st.sidebar.subheader("Feature Selection")
-features = st.sidebar.multiselect("Select Features", ['Open', 'High', 'Low', 'Close', 'Volume', 'MA10', 'MA50', 'Return'], default=['MA10', 'MA50', 'Return'])
+features = st.sidebar.multiselect(
+    "Select Features",
+    ['Open', 'High', 'Low', 'Close', 'Volume', 'MA10', 'MA50', 'Return'],
+    default=['MA10', 'MA50', 'Return']
+)
 target = adj_close_col
 
 # --- Train/Test Split ---
