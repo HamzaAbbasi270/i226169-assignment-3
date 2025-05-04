@@ -21,26 +21,12 @@ st.markdown("""
 st.title("📈 Financial ML App with Linear Regression")
 
 # Initialize session state variables
-if "data_loaded" not in st.session_state:
-    st.session_state["data_loaded"] = False
-if "features_ready" not in st.session_state:
-    st.session_state["features_ready"] = False
-if "split_done" not in st.session_state:
-    st.session_state["split_done"] = False
-if "model_trained" not in st.session_state:
-    st.session_state["model_trained"] = False
-if "model" not in st.session_state:
-    st.session_state["model"] = None
-if "X_train" not in st.session_state:
-    st.session_state["X_train"] = None
-if "X_test" not in st.session_state:
-    st.session_state["X_test"] = None
-if "y_train" not in st.session_state:
-    st.session_state["y_train"] = None
-if "y_test" not in st.session_state:
-    st.session_state["y_test"] = None
-if "data" not in st.session_state:
-    st.session_state["data"] = pd.DataFrame()
+for key in [
+    "data_loaded", "features_ready", "split_done", "model_trained",
+    "model", "X_train", "X_test", "y_train", "y_test", "data"
+]:
+    if key not in st.session_state:
+        st.session_state[key] = False if key != "data" else pd.DataFrame()
 
 # Welcome message
 st.markdown("### Welcome to the Streamlit ML App!")
@@ -53,46 +39,49 @@ ticker = st.sidebar.text_input("Enter Stock Ticker (e.g., AAPL, TSLA):", "AAPL")
 start_date = st.sidebar.date_input("Start Date", pd.to_datetime("2022-01-01"))
 end_date = st.sidebar.date_input("End Date", pd.to_datetime("2023-01-01"))
 
-# Step buttons
+# Fetch data
 if st.sidebar.button("Fetch Yahoo Finance Data"):
     data = yf.download(ticker, start=start_date, end=end_date)
     if not data.empty:
         st.success("✅ Data Loaded Successfully!")
         st.dataframe(data.tail())
-        st.session_state["data"] = data  # Store the data in session state
+        st.session_state["data"] = data
         st.session_state["data_loaded"] = True
-        st.session_state["features_ready"] = False # Reset subsequent steps
+        st.session_state["features_ready"] = False
         st.session_state["split_done"] = False
         st.session_state["model_trained"] = False
         st.session_state["model"] = None
     else:
         st.error("❌ Failed to load data. Check ticker or date range.")
 
-# Continue only if data is loaded
+# Feature Engineering
 if st.button("Feature Engineering"):
     if st.session_state["data_loaded"] and not st.session_state["data"].empty:
         data = st.session_state["data"].copy()
-        adj_close_col = None
-        possible_cols = ["Adj Close", "AdjClose", "ADJ CLOSE", "Close"] # Add other potential names
+        
+        # Normalize column names for detection
+        normalized_cols = {col.lower().replace(" ", "").replace("_", ""): col for col in data.columns}
+        possible_variants = ["adjclose", "adj_close", "adjustedclose", "close"]
 
-        for col in possible_cols:
-            if col in data.columns:
-                adj_close_col = col
+        adj_close_col = None
+        for variant in possible_variants:
+            if variant in normalized_cols:
+                adj_close_col = normalized_cols[variant]
                 break
 
         if adj_close_col:
             data["Return"] = data[adj_close_col].pct_change()
             data["Lag1"] = data["Return"].shift(1)
             data = data.dropna()
-            st.success("✅ Features Created.")
+            st.success(f"✅ Features Created using '{adj_close_col}' column.")
             st.line_chart(data["Return"])
-            st.session_state["data"] = data # Update data with features
+            st.session_state["data"] = data
             st.session_state["features_ready"] = True
-            st.session_state["split_done"] = False # Reset next steps
+            st.session_state["split_done"] = False
             st.session_state["model_trained"] = False
             st.session_state["model"] = None
         else:
-            st.error(f"❌ Could not find 'Adj Close' or similar column in the downloaded data. Available columns: {data.columns.tolist()}")
+            st.error(f"❌ 'Adj Close' column not found in the downloaded data. Try a different stock or date range. Available columns: {data.columns.tolist()}")
     else:
         st.warning("⚠️ Please fetch the stock data first.")
 
@@ -102,7 +91,7 @@ if st.button("Preprocessing"):
         data = st.session_state["data"].dropna()
         st.success("✅ Missing values removed.")
         st.write(data.describe())
-        st.session_state["data"] = data # Update processed data
+        st.session_state["data"] = data
     else:
         st.warning("⚠️ Please fetch the stock data first.")
 
@@ -121,10 +110,10 @@ if st.button("Train/Test Split"):
         st.session_state["y_train"] = y_train
         st.session_state["y_test"] = y_test
         st.session_state["split_done"] = True
-        st.session_state["model_trained"] = False # Reset next step
+        st.session_state["model_trained"] = False
         st.session_state["model"] = None
     else:
-        st.warning("⚠️ Please fetch data and perform feature engineering first.")
+        st.warning("⚠️ Please perform feature engineering first.")
 
 # Model Training
 if st.button("Train Model"):
@@ -148,9 +137,9 @@ if st.button("Evaluate Model"):
         results_df = pd.DataFrame({"Actual": st.session_state["y_test"].values, "Predicted": preds})
         st.line_chart(results_df)
     else:
-        st.warning("⚠️ Please train the model first by clicking the 'Train Model' button.")
+        st.warning("⚠️ Please train the model first.")
 
-# Results Visualization
+# Visualize Predictions
 if st.button("Visualize Predictions"):
     if st.session_state["model_trained"]:
         results = pd.DataFrame({
@@ -160,4 +149,4 @@ if st.button("Visualize Predictions"):
         fig = px.scatter(results, x="Actual", y="Predicted", title="Actual vs. Predicted Returns")
         st.plotly_chart(fig)
     else:
-        st.warning("⚠️ Please train the model first by clicking the 'Train Model' button.")
+        st.warning("⚠️ Please train the model first.")
