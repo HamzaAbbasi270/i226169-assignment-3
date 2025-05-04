@@ -21,25 +21,29 @@ data = yf.download(ticker, start=start_date, end=end_date)
 
 # Fix for multi-index columns (some yfinance versions do this)
 if isinstance(data.columns, pd.MultiIndex):
-    data.columns = data.columns.get_level_values(0)
+    data.columns = [' '.join(col).strip() if isinstance(col, tuple) else col for col in data.columns.values]
 
-if 'Adj Close' not in data.columns:
+# Ensure 'Adj Close' exists
+adj_close_candidates = [col for col in data.columns if 'adj close' in col.lower()]
+if not adj_close_candidates:
     st.error("'Adj Close' column not found. Please check the ticker or date range.")
     st.dataframe(data.head())
     st.stop()
 
+adj_close_col = adj_close_candidates[0]  # Use the first match
+
 st.dataframe(data.tail())
 
 # --- Feature Engineering ---
-data['Return'] = data['Adj Close'].pct_change()
-data['MA10'] = data['Adj Close'].rolling(window=10).mean()
-data['MA50'] = data['Adj Close'].rolling(window=50).mean()
+data['Return'] = data[adj_close_col].pct_change()
+data['MA10'] = data[adj_close_col].rolling(window=10).mean()
+data['MA50'] = data[adj_close_col].rolling(window=50).mean()
 data = data.dropna()
 
 # --- User Select Features ---
 st.sidebar.subheader("Feature Selection")
 features = st.sidebar.multiselect("Select Features", ['Open', 'High', 'Low', 'Close', 'Volume', 'MA10', 'MA50', 'Return'], default=['MA10', 'MA50', 'Return'])
-target = 'Adj Close'
+target = adj_close_col
 
 # --- Train/Test Split ---
 X = data[features]
@@ -61,7 +65,7 @@ st.subheader("Actual vs Predicted")
 fig, ax = plt.subplots(figsize=(10, 5))
 ax.plot(y_test.values, label='Actual')
 ax.plot(y_pred, label='Predicted')
-ax.set_title("Actual vs Predicted Adj Close")
+ax.set_title(f"Actual vs Predicted {adj_close_col}")
 ax.legend()
 st.pyplot(fig)
 
