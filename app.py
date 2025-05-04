@@ -18,9 +18,16 @@ end_date = st.sidebar.date_input("End Date", pd.to_datetime("2024-12-31"))
 # --- Load Data ---
 st.subheader(f"Stock Data for {ticker}")
 data = yf.download(ticker, start=start_date, end=end_date)
-if data.empty:
-    st.error("No data found. Please check the ticker and date range.")
+
+# Fix for multi-index columns (some yfinance versions do this)
+if isinstance(data.columns, pd.MultiIndex):
+    data.columns = data.columns.get_level_values(0)
+
+if 'Adj Close' not in data.columns:
+    st.error("'Adj Close' column not found. Please check the ticker or date range.")
+    st.dataframe(data.head())
     st.stop()
+
 st.dataframe(data.tail())
 
 # --- Feature Engineering ---
