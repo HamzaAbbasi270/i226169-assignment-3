@@ -19,62 +19,62 @@ end_date = st.sidebar.date_input("End Date", pd.to_datetime("2024-12-31"))
 st.subheader(f"Downloading data for {ticker}")
 data = yf.download(ticker, start=start_date, end=end_date)
 
-# --- Fix MultiIndex Columns IMMEDIATELY ---
+# --- Flatten MultiIndex Columns First (to avoid KeyError) ---
 if isinstance(data.columns, pd.MultiIndex):
-    data.columns = [' '.join(map(str, col)).strip() for col in data.columns.values]
+    data.columns = [' '.join(str(i) for i in col).strip() for col in data.columns.values]
 
-# --- Display Sample Data ---
-st.write("Sample of downloaded data:")
-st.dataframe(data.head())
-
-# --- Safely Find 'Adj Close' Column ---
+# --- Check for 'Adj Close' column safely ---
+columns_flat = [col.lower() for col in data.columns]
 adj_close_col = None
 for col in data.columns:
     if 'adj close' in col.lower():
         adj_close_col = col
         break
 
-if adj_close_col is None:
-    st.error("❌ 'Adj Close' column not found. Please check the ticker symbol and date range.")
+if not adj_close_col:
+    st.error("❌ 'Adj Close' column not found in the downloaded data. Try a different stock or date range.")
+    st.write("Columns found:", list(data.columns))
+    st.dataframe(data.head())
     st.stop()
 
 # --- Feature Engineering ---
 data['Return'] = data[adj_close_col].pct_change()
 data['MA10'] = data[adj_close_col].rolling(window=10).mean()
 data['MA50'] = data[adj_close_col].rolling(window=50).mean()
-data.dropna(inplace=True)
+data = data.dropna()
 
 # --- Feature Selection ---
 st.sidebar.subheader("Feature Selection")
-features_available = ['Open', 'High', 'Low', 'Close', 'Volume', 'MA10', 'MA50', 'Return']
-selected_features = st.sidebar.multiselect("Select Features", [f for f in features_available if f in data.columns], default=['MA10', 'MA50', 'Return'])
+all_features = ['Open', 'High', 'Low', 'Close', 'Volume', 'MA10', 'MA50', 'Return']
+available_features = [col for col in all_features if col in data.columns]
+selected_features = st.sidebar.multiselect("Select Features", available_features, default=['MA10', 'MA50', 'Return'])
 
 if not selected_features:
     st.warning("Please select at least one feature.")
     st.stop()
 
-# --- Train/Test Split ---
+# --- Model Training ---
 X = data[selected_features]
 y = data[adj_close_col]
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# --- Train Model ---
-st.subheader("Model Training")
 model = RandomForestRegressor(n_estimators=100, random_state=42)
 model.fit(X_train, y_train)
 y_pred = model.predict(X_test)
 
 # --- Evaluation ---
+st.subheader("📈 Model Performance")
 st.write(f"**Mean Squared Error (MSE):** {mean_squared_error(y_test, y_pred):.4f}")
 st.write(f"**R² Score:** {r2_score(y_test, y_pred):.4f}")
 
-# --- Visualization ---
-st.subheader("📈 Actual vs Predicted")
+# --- Plot Actual vs Predicted ---
+st.subheader("📉 Actual vs Predicted Prices")
 fig, ax = plt.subplots(figsize=(10, 5))
-ax.plot(y_test.values, label='Actual')
-ax.plot(y_pred, label='Predicted')
-ax.set_title(f"Actual vs Predicted - {adj_close_col}")
+ax.plot(y_test.values, label="Actual")
+ax.plot(y_pred, label="Predicted")
+ax.set_title("Actual vs Predicted")
 ax.legend()
 st.pyplot(fig)
 
-st.info("📌 Extend this app with Kragle data or more ML models for bonus credit.")
+# --- Completion Note ---
+st.info("✅ You can expand this app with Kragle datasets or additional models for further analysis.")
